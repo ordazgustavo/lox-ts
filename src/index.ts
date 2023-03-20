@@ -2,6 +2,8 @@ import * as fs from "fs/promises";
 import * as readLine from "readline/promises";
 import { Scanner } from "./scanner.js";
 import { ErrorReporter } from "./error-reporter.js";
+import { Parser } from "./parser.js";
+import { AstPrinter } from "./ast-printer.js";
 
 class Lox {
   errorReporter = new ErrorReporter();
@@ -48,9 +50,13 @@ class Lox {
     const scanner = new Scanner(source, this.errorReporter);
     const tokens = scanner.scanTokens();
 
-    for (const token of tokens) {
-      console.log(token);
-    }
+    const parser = new Parser(tokens, this.errorReporter);
+    const expression = parser.parse()!;
+
+    // Stop if there was a syntax error.
+    if (this.errorReporter.hadError) return;
+
+    console.log(new AstPrinter().print(expression));
   }
 }
 
