@@ -7,13 +7,15 @@
   "scripts": {
     "build": "tsup",
     "start": "pnpm build; node ./dist/index.js",
-    "watch": "tsup --watch --onSuccess \"node ./dist/index.js\""
+    "watch": "tsup --watch --onSuccess \"node ./dist/index.js\"",
+    "generate": "rm ./src/expr.ts; pnpm build ./tool/generate-ast.ts; node ./dist/generate-ast.js; prettier -w src; pnpm build"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^18.15.3",
+    "prettier": "^2.8.5",
     "tsup": "^6.7.0",
     "typescript": "^5.0.2"
   }
