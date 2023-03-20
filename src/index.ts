@@ -4,9 +4,11 @@ import { Scanner } from "./scanner.js";
 import { ErrorReporter } from "./error-reporter.js";
 import { Parser } from "./parser.js";
 import { AstPrinter } from "./ast-printer.js";
+import { Interpreter } from "./interpreter.js";
 
 class Lox {
-  errorReporter = new ErrorReporter();
+  private errorReporter = new ErrorReporter();
+  private interpreter = new Interpreter(this.errorReporter);
 
   main() {
     const args = process.argv;
@@ -30,6 +32,7 @@ class Lox {
     });
     this.run(source);
     if (this.errorReporter.hadError) process.exit(65);
+    if (this.errorReporter.hadRuntimeError) process.exit(70);
   }
 
   async runPrompt() {
@@ -57,6 +60,7 @@ class Lox {
     if (this.errorReporter.hadError) return;
 
     console.log(new AstPrinter().print(expression));
+    this.interpreter.interpret(expression);
   }
 }
 
