@@ -1,37 +1,69 @@
 import * as fs from "fs/promises";
 import { fileURLToPath } from "node:url";
 
-defineAst("Expr", [
-  "Binary   : left: Expr, operator: Token, right: Expr",
-  "Grouping : expression: Expr",
-  "Literal  : value: Obj",
-  "Unary    : operator: Token, right: Expr",
-]);
+defineAst(
+  "Expr",
+  [
+    "Assign   : name: Token, value: Expr",
+    "Binary   : left: Expr, operator: Token, right: Expr",
+    "Grouping : expression: Expr",
+    "Literal  : value: Obj",
+    "Unary    : operator: Token, right: Expr",
+    "Variable : name: Token",
+  ],
+  [[["Token", "Obj"], "token"]]
+);
+
+defineAst(
+  "Stmt",
+  [
+    "Block      : statements: Stmt[]",
+    "Expression : expression: Expr",
+    "Print      : expression: Expr",
+    "Var        : name: Token, initializer: Expr | null",
+  ],
+  [
+    [["Expr"], "expr"],
+    [["Token"], "token"],
+  ]
+);
 
 type Ref<T> = { ref: T };
 
-function defineAst(baseName: string, types: string[]) {
+function defineAst(
+  baseName: string,
+  types: string[],
+  deps: [string[], string][]
+) {
   let source: Ref<string> = { ref: "" };
 
-  source.ref += 'import { Token, Obj } from "./token.js";\n';
-  source.ref += "\n";
+  source.ref += deps
+    .map(([names, path]) => `import {${names.join()}} from "./${path}.js";`)
+    .join("\n");
+
+  source.ref += "\n\n";
 
   defineVisitor(source, baseName, types);
+  source.ref += "\n";
 
-  source.ref += "export abstract class " + baseName + " {\n";
-  source.ref += "abstract accept<R>(_visitor: Visitor<R>): R;\n";
-  source.ref += "}\n";
+  source.ref += `export abstract class ${baseName}  {
+abstract accept<R>(_visitor: Visitor<R>): R;
+}`;
+  source.ref += "\n\n";
 
   for (const type of types) {
     const [className, fields] = type.split(" : ");
     defineType(source, baseName, className!.trim(), fields!.trim());
+    source.ref += "\n";
   }
 
-  const filePath = fileURLToPath(new URL("../src/expr.ts", import.meta.url));
+  const filePath = fileURLToPath(
+    new URL(`../src/${baseName.toLowerCase()}.ts`, import.meta.url)
+  );
 
   fs.writeFile(filePath, source.ref, {
     encoding: "utf8",
-  }).catch(console.log);
+  }).catch(console.error);
 }
 
 function defineVisitor(source: Ref<string>, baseName: string, types: string[]) {
@@ -40,7 +72,7 @@ function defineVisitor(source: Ref<string>, baseName: string, types: string[]) {
   for (const type of types) {
     const typeName = type.split(" : ")[0]!.trim();
     source.ref +=
-      "    visit" +
+      "visit" +
       typeName +
       baseName +
       "(" +
@@ -64,25 +96,23 @@ function defineType(
   const fields = fieldList.split(", ");
   // Fields.
   for (const field of fields) {
-    source.ref += "    " + field + ";\n";
+    source.ref += `${field}\n`;
   }
+  source.ref += "\n";
 
   // Constructor.
-  source.ref += "    constructor(" + fieldList + ") {\n";
-  source.ref += "      super();\n";
+  source.ref += `constructor(${fieldList}) {\n`;
+  source.ref += "super();\n";
 
   // Store parameters in fields.
   for (const field of fields) {
     const name = field.split(": ")[0];
-    source.ref += "      this." + name + " = " + name + ";\n";
+    source.ref += `this.${name} = ${name};\n`;
   }
-  source.ref += "    }\n";
-
+  source.ref += "}\n";
   source.ref += "\n";
-  source.ref += "    override accept<R>(visitor: Visitor<R>): R {\n";
-  source.ref +=
-    "      return visitor.visit" + className + baseName + "(this);\n";
-  source.ref += "    }\n";
+  source.ref += `override accept<R>(visitor: Visitor<R>): R {
+return visitor.visit${className}${baseName}(this);}`;
 
-  source.ref += "  }\n";
+  source.ref += "}\n";
 }

@@ -3,7 +3,6 @@ import * as readLine from "readline/promises";
 import { Scanner } from "./scanner.js";
 import { ErrorReporter } from "./error-reporter.js";
 import { Parser } from "./parser.js";
-import { AstPrinter } from "./ast-printer.js";
 import { Interpreter } from "./interpreter.js";
 
 class Lox {
@@ -12,8 +11,6 @@ class Lox {
 
   main() {
     const args = process.argv;
-
-    console.log(args);
 
     if (args.length < 2) {
       console.log("Usage: jlox [script]");
@@ -54,13 +51,13 @@ class Lox {
     const tokens = scanner.scanTokens();
 
     const parser = new Parser(tokens, this.errorReporter);
-    const expression = parser.parse()!;
+    const statements = parser.parse();
 
     // Stop if there was a syntax error.
     if (this.errorReporter.hadError) return;
 
-    console.log(new AstPrinter().print(expression));
-    this.interpreter.interpret(expression);
+    // console.log(new AstPrinter().print(statements));
+    this.interpreter.interpret(statements);
   }
 }
 

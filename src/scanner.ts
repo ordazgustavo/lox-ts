@@ -140,7 +140,7 @@ export class Scanner {
         } else if (this.isAlpha(c)) {
           this.identifier();
         } else {
-          this.errorReporter.error(this.line, "Unexpected character.");
+          this.errorReporter.scannerError(this.line, "Unexpected character.");
         }
         break;
     }
@@ -178,7 +178,7 @@ export class Scanner {
     }
 
     if (this.isAtEnd()) {
-      this.errorReporter.error(this.line, "Unterminated string.");
+      this.errorReporter.scannerError(this.line, "Unterminated string.");
       return;
     }
 

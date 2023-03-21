@@ -1,20 +1,34 @@
 import { Obj, Token } from "./token.js";
-import { Binary, Expr, Grouping, Literal, Unary, Visitor } from "./expr.js";
+import {
+  Assign,
+  Binary,
+  Expr,
+  Grouping,
+  Literal,
+  Unary,
+  Variable,
+  Visitor,
+} from "./expr.js";
 import { TokenType } from "./token-type.js";
 import { RuntimeError } from "./runtime-error.js";
 import { ErrorReporter } from "./error-reporter.js";
+import { Block, Expression, Print, Stmt, Var } from "./stmt.js";
+import { Environment } from "./environment.js";
 
-export class Interpreter implements Visitor<Obj> {
+export class Interpreter implements Visitor<Obj>, Visitor<void> {
   private errorReporter: ErrorReporter;
+
+  private environment = new Environment();
 
   constructor(errorReporter: ErrorReporter) {
     this.errorReporter = errorReporter;
   }
 
-  interpret(expression: Expr) {
+  interpret(statements: Stmt[]) {
     try {
-      const value = this.evaluate(expression);
-      console.log(this.stringify(value));
+      for (const stmt of statements) {
+        this.execute(stmt);
+      }
     } catch (error) {
       this.errorReporter.runtimeError(error as RuntimeError);
     }
@@ -22,6 +36,53 @@ export class Interpreter implements Visitor<Obj> {
 
   private evaluate(expr: Expr): Obj {
     return expr.accept(this);
+  }
+
+  private execute(stmt: Stmt) {
+    stmt.accept(this);
+  }
+
+  private executeBlock(statements: Stmt[], environment: Environment) {
+    const previous = this.environment;
+    try {
+      this.environment = environment;
+
+      for (const statement of statements) {
+        this.execute(statement);
+      }
+    } finally {
+      this.environment = previous;
+    }
+  }
+
+  public visitBlockStmt(stmt: Block) {
+    this.executeBlock(stmt.statements, new Environment(this.environment));
+    return null;
+  }
+
+  visitExpressionStmt(stmt: Expression) {
+    this.evaluate(stmt.expression);
+  }
+
+  visitPrintStmt(stmt: Print) {
+    const value = this.evaluate(stmt.expression);
+    console.log(this.stringify(value));
+  }
+
+  visitVarStmt(stmt: Var) {
+    let value = null;
+    if (stmt.initializer != null) {
+      value = this.evaluate(stmt.initializer);
+    }
+
+    this.environment.define(stmt.name.lexeme, value);
+    return null;
+  }
+
+  visitAssignExpr(expr: Assign): Obj {
+    const value = this.evaluate(expr.value);
+    this.environment.assign(expr.name, value);
+    return value;
   }
 
   visitBinaryExpr(expr: Binary): Obj {
@@ -91,6 +152,9 @@ export class Interpreter implements Visitor<Obj> {
 
     // Unreachable.
     return null;
+  }
+  visitVariableExpr(expr: Variable): Obj {
+    return this.environment.get(expr.name);
   }
 
   private checkNumberOperand(operator: Token, operand: Obj) {
