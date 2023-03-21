@@ -5,6 +5,7 @@ import {
   Expr,
   Grouping,
   Literal,
+  Logical,
   Unary,
   Variable,
   Visitor,
@@ -12,7 +13,7 @@ import {
 import { TokenType } from "./token-type.js";
 import { RuntimeError } from "./runtime-error.js";
 import { ErrorReporter } from "./error-reporter.js";
-import { Block, Expression, Print, Stmt, Var } from "./stmt.js";
+import { Block, Expression, If, Print, Stmt, Var, While } from "./stmt.js";
 import { Environment } from "./environment.js";
 
 export class Interpreter implements Visitor<Obj>, Visitor<void> {
@@ -64,6 +65,14 @@ export class Interpreter implements Visitor<Obj>, Visitor<void> {
     this.evaluate(stmt.expression);
   }
 
+  public visitIfStmt(stmt: If) {
+    if (this.isTruthy(this.evaluate(stmt.condition))) {
+      this.execute(stmt.thenBranch);
+    } else if (stmt.elseBranch !== null) {
+      this.execute(stmt.elseBranch);
+    }
+  }
+
   visitPrintStmt(stmt: Print) {
     const value = this.evaluate(stmt.expression);
     console.log(this.stringify(value));
@@ -76,7 +85,11 @@ export class Interpreter implements Visitor<Obj>, Visitor<void> {
     }
 
     this.environment.define(stmt.name.lexeme, value);
-    return null;
+  }
+  visitWhileStmt(stmt: While) {
+    while (this.isTruthy(this.evaluate(stmt.condition))) {
+      this.execute(stmt.body);
+    }
   }
 
   visitAssignExpr(expr: Assign): Obj {
@@ -152,6 +165,17 @@ export class Interpreter implements Visitor<Obj>, Visitor<void> {
 
     // Unreachable.
     return null;
+  }
+  visitLogicalExpr(expr: Logical): Obj {
+    const left = this.evaluate(expr.left);
+
+    if (expr.operator.type == TokenType.OR) {
+      if (this.isTruthy(left)) return left;
+    } else {
+      if (!this.isTruthy(left)) return left;
+    }
+
+    return this.evaluate(expr.right);
   }
   visitVariableExpr(expr: Variable): Obj {
     return this.environment.get(expr.name);

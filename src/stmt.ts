@@ -4,8 +4,10 @@ import { Token } from "./token.js";
 export interface Visitor<R> {
   visitBlockStmt(stmt: Block): R;
   visitExpressionStmt(stmt: Expression): R;
+  visitIfStmt(stmt: If): R;
   visitPrintStmt(stmt: Print): R;
   visitVarStmt(stmt: Var): R;
+  visitWhileStmt(stmt: While): R;
 }
 
 export abstract class Stmt {
@@ -38,6 +40,23 @@ export class Expression extends Stmt {
   }
 }
 
+export class If extends Stmt {
+  condition: Expr;
+  thenBranch: Stmt;
+  elseBranch: Stmt | null;
+
+  constructor(condition: Expr, thenBranch: Stmt, elseBranch: Stmt | null) {
+    super();
+    this.condition = condition;
+    this.thenBranch = thenBranch;
+    this.elseBranch = elseBranch;
+  }
+
+  override accept<R>(visitor: Visitor<R>): R {
+    return visitor.visitIfStmt(this);
+  }
+}
+
 export class Print extends Stmt {
   expression: Expr;
 
@@ -63,5 +82,20 @@ export class Var extends Stmt {
 
   override accept<R>(visitor: Visitor<R>): R {
     return visitor.visitVarStmt(this);
+  }
+}
+
+export class While extends Stmt {
+  condition: Expr;
+  body: Stmt;
+
+  constructor(condition: Expr, body: Stmt) {
+    super();
+    this.condition = condition;
+    this.body = body;
+  }
+
+  override accept<R>(visitor: Visitor<R>): R {
+    return visitor.visitWhileStmt(this);
   }
 }

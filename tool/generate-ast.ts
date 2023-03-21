@@ -8,6 +8,7 @@ defineAst(
     "Binary   : left: Expr, operator: Token, right: Expr",
     "Grouping : expression: Expr",
     "Literal  : value: Obj",
+    "Logical  : left: Expr, operator: Token, right: Expr",
     "Unary    : operator: Token, right: Expr",
     "Variable : name: Token",
   ],
@@ -19,8 +20,10 @@ defineAst(
   [
     "Block      : statements: Stmt[]",
     "Expression : expression: Expr",
+    "If         : condition: Expr, thenBranch: Stmt, elseBranch: Stmt | null",
     "Print      : expression: Expr",
     "Var        : name: Token, initializer: Expr | null",
+    "While      : condition: Expr, body: Stmt",
   ],
   [
     [["Expr"], "expr"],
