@@ -1,31 +1,28 @@
 import { Obj, Token } from "./token.js";
-import {
-  Assign,
-  Binary,
-  Expr,
-  Grouping,
-  Literal,
-  Logical,
-  Unary,
-  Variable,
-  Visitor,
-} from "./expr.js";
+import * as Expr from "./expr.js";
 import { TokenType } from "./token-type.js";
 import { RuntimeError } from "./runtime-error.js";
 import { ErrorReporter } from "./error-reporter.js";
-import { Block, Expression, If, Print, Stmt, Var, While } from "./stmt.js";
+import * as Stmt from "./stmt.js";
 import { Environment } from "./environment.js";
+import { LoxCallable } from "./lox-callable.js";
+import { Clock } from "./clock.js";
+import { LoxFun } from "./lox-fun.js";
+import { Return } from "./return.js";
 
-export class Interpreter implements Visitor<Obj>, Visitor<void> {
+export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
   private errorReporter: ErrorReporter;
 
-  private environment = new Environment();
+  globals = new Environment();
+  private environment = this.globals;
 
   constructor(errorReporter: ErrorReporter) {
     this.errorReporter = errorReporter;
+
+    this.globals.define("clock", new Clock());
   }
 
-  interpret(statements: Stmt[]) {
+  interpret(statements: Stmt.Stmt[]) {
     try {
       for (const stmt of statements) {
         this.execute(stmt);
@@ -35,15 +32,15 @@ export class Interpreter implements Visitor<Obj>, Visitor<void> {
     }
   }
 
-  private evaluate(expr: Expr): Obj {
+  private evaluate(expr: Expr.Expr): Obj {
     return expr.accept(this);
   }
 
-  private execute(stmt: Stmt) {
+  private execute(stmt: Stmt.Stmt) {
     stmt.accept(this);
   }
 
-  private executeBlock(statements: Stmt[], environment: Environment) {
+  executeBlock(statements: Stmt.Stmt[], environment: Environment) {
     const previous = this.environment;
     try {
       this.environment = environment;
@@ -56,16 +53,22 @@ export class Interpreter implements Visitor<Obj>, Visitor<void> {
     }
   }
 
-  public visitBlockStmt(stmt: Block) {
+  public visitBlockStmt(stmt: Stmt.Block) {
     this.executeBlock(stmt.statements, new Environment(this.environment));
     return null;
   }
 
-  visitExpressionStmt(stmt: Expression) {
+  visitExpressionStmt(stmt: Stmt.Expression) {
     this.evaluate(stmt.expression);
   }
 
-  public visitIfStmt(stmt: If) {
+  public visitFunStmt(stmt: Stmt.Fun) {
+    const fun = new LoxFun(stmt, this.environment);
+    this.environment.define(stmt.name.lexeme, fun);
+    return null;
+  }
+
+  public visitIfStmt(stmt: Stmt.If) {
     if (this.isTruthy(this.evaluate(stmt.condition))) {
       this.execute(stmt.thenBranch);
     } else if (stmt.elseBranch !== null) {
@@ -73,12 +76,19 @@ export class Interpreter implements Visitor<Obj>, Visitor<void> {
     }
   }
 
-  visitPrintStmt(stmt: Print) {
+  visitPrintStmt(stmt: Stmt.Print) {
     const value = this.evaluate(stmt.expression);
     console.log(this.stringify(value));
   }
 
-  visitVarStmt(stmt: Var) {
+  visitReturnStmt(stmt: Stmt.Return) {
+    let value = null;
+    if (stmt.value !== null) value = this.evaluate(stmt.value);
+
+    throw new Return(value);
+  }
+
+  visitVarStmt(stmt: Stmt.Var) {
     let value = null;
     if (stmt.initializer != null) {
       value = this.evaluate(stmt.initializer);
@@ -86,19 +96,19 @@ export class Interpreter implements Visitor<Obj>, Visitor<void> {
 
     this.environment.define(stmt.name.lexeme, value);
   }
-  visitWhileStmt(stmt: While) {
+  visitWhileStmt(stmt: Stmt.While) {
     while (this.isTruthy(this.evaluate(stmt.condition))) {
       this.execute(stmt.body);
     }
   }
 
-  visitAssignExpr(expr: Assign): Obj {
+  visitAssignExpr(expr: Expr.Assign): Obj {
     const value = this.evaluate(expr.value);
     this.environment.assign(expr.name, value);
     return value;
   }
 
-  visitBinaryExpr(expr: Binary): Obj {
+  visitBinaryExpr(expr: Expr.Binary): Obj {
     const left = this.evaluate(expr.left);
     const right = this.evaluate(expr.right);
 
@@ -146,13 +156,37 @@ export class Interpreter implements Visitor<Obj>, Visitor<void> {
     // Unreachable.
     return null;
   }
-  visitGroupingExpr(expr: Grouping): Obj {
+  visitCallExpr(expr: Expr.Call): Obj {
+    const callee = this.evaluate(expr.callee);
+
+    const args: Obj[] = [];
+    for (const argument of expr.args) {
+      args.push(this.evaluate(argument));
+    }
+
+    if (!(callee instanceof LoxCallable)) {
+      throw new RuntimeError(
+        expr.paren,
+        "Can only call functions and classes."
+      );
+    }
+
+    const fun = callee;
+    if (args.length !== fun.arity()) {
+      throw new RuntimeError(
+        expr.paren,
+        "Expected " + fun.arity() + " arguments but got " + args.length + "."
+      );
+    }
+    return fun.call(this, args);
+  }
+  visitGroupingExpr(expr: Expr.Grouping): Obj {
     return this.evaluate(expr.expression);
   }
-  visitLiteralExpr(expr: Literal): Obj {
+  visitLiteralExpr(expr: Expr.Literal): Obj {
     return expr.value;
   }
-  visitUnaryExpr(expr: Unary): Obj {
+  visitUnaryExpr(expr: Expr.Unary): Obj {
     const right = this.evaluate(expr.right);
 
     switch (expr.operator.type) {
@@ -166,7 +200,7 @@ export class Interpreter implements Visitor<Obj>, Visitor<void> {
     // Unreachable.
     return null;
   }
-  visitLogicalExpr(expr: Logical): Obj {
+  visitLogicalExpr(expr: Expr.Logical): Obj {
     const left = this.evaluate(expr.left);
 
     if (expr.operator.type == TokenType.OR) {
@@ -177,7 +211,7 @@ export class Interpreter implements Visitor<Obj>, Visitor<void> {
 
     return this.evaluate(expr.right);
   }
-  visitVariableExpr(expr: Variable): Obj {
+  visitVariableExpr(expr: Expr.Variable): Obj {
     return this.environment.get(expr.name);
   }
 

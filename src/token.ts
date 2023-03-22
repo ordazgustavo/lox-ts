@@ -1,6 +1,7 @@
+import { LoxCallable } from "./lox-callable.js";
 import { TokenType } from "./token-type.js";
 
-export type Obj = string | number | boolean | null;
+export type Obj = string | number | boolean | LoxCallable | null;
 
 export class Token {
   type: TokenType;
