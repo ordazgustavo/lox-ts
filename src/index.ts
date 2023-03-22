@@ -4,6 +4,7 @@ import { Scanner } from "./scanner.js";
 import { ErrorReporter } from "./error-reporter.js";
 import { Parser } from "./parser.js";
 import { Interpreter } from "./interpreter.js";
+import { Resolver } from "./resolver.js";
 
 class Lox {
   private errorReporter = new ErrorReporter();
@@ -54,6 +55,11 @@ class Lox {
     const statements = parser.parse();
 
     // Stop if there was a syntax error.
+    if (this.errorReporter.hadError) return;
+
+    const resolver = new Resolver(this.interpreter, this.errorReporter);
+    resolver.resolve(statements);
+
     if (this.errorReporter.hadError) return;
 
     // console.log(new AstPrinter().print(statements));

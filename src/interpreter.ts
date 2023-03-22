@@ -15,6 +15,7 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
 
   globals = new Environment();
   private environment = this.globals;
+  private locals: WeakMap<Expr.Expr, number> = new WeakMap();
 
   constructor(errorReporter: ErrorReporter) {
     this.errorReporter = errorReporter;
@@ -38,6 +39,10 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
 
   private execute(stmt: Stmt.Stmt) {
     stmt.accept(this);
+  }
+
+  resolve(expr: Expr.Expr, depth: number) {
+    this.locals.set(expr, depth);
   }
 
   executeBlock(statements: Stmt.Stmt[], environment: Environment) {
@@ -104,7 +109,12 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
 
   visitAssignExpr(expr: Expr.Assign): Obj {
     const value = this.evaluate(expr.value);
-    this.environment.assign(expr.name, value);
+    const distance = this.locals.get(expr);
+    if (distance !== undefined) {
+      this.environment.assignAt(distance, expr.name, value);
+    } else {
+      this.globals.assign(expr.name, value);
+    }
     return value;
   }
 
@@ -212,7 +222,16 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
     return this.evaluate(expr.right);
   }
   visitVariableExpr(expr: Expr.Variable): Obj {
-    return this.environment.get(expr.name);
+    return this.lookUpVariable(expr.name, expr);
+  }
+
+  private lookUpVariable(name: Token, expr: Expr.Expr): Obj {
+    const distance = this.locals.get(expr);
+    if (distance !== undefined) {
+      return this.environment.getAt(distance, name.lexeme);
+    } else {
+      return this.globals.get(name);
+    }
   }
 
   private checkNumberOperand(operator: Token, operand: Obj) {

@@ -18,13 +18,18 @@ export class ErrorReporter {
     }
   }
 
+  resolverError(token: Token, message: string) {
+    this.report(token.line, token.lexeme, message);
+    this.hadError = true;
+  }
+
   runtimeError(error: RuntimeError) {
     console.error(error.message + "\n[line " + error.token.line + "]");
     this.hadRuntimeError = true;
   }
 
   report(line: number, where: string, message: string) {
-    console.error("[line " + line + "] Error" + where + ": " + message);
+    console.error("[line " + line + "] Error " + where + ": " + message);
     this.hadError = true;
   }
 }
