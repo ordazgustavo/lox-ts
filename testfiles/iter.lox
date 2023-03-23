@@ -1,0 +1,18 @@
+class Iter {
+
+  init() {
+    this.count = 0;
+  }
+
+  next() {
+    this.count = this.count + 1;
+    return this.count;
+  }
+}
+
+var iter = Iter();
+print iter.next();
+print iter.next();
+print iter.next();
+print iter.next();
+print iter.count;

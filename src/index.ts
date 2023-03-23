@@ -7,8 +7,8 @@ import { Interpreter } from "./interpreter.js";
 import { Resolver } from "./resolver.js";
 
 class Lox {
-  private errorReporter = new ErrorReporter();
-  private interpreter = new Interpreter(this.errorReporter);
+  #errorReporter = new ErrorReporter();
+  #interpreter = new Interpreter(this.#errorReporter);
 
   main() {
     const args = process.argv;
@@ -29,8 +29,8 @@ class Lox {
       process.exit(1);
     });
     this.run(source);
-    if (this.errorReporter.hadError) process.exit(65);
-    if (this.errorReporter.hadRuntimeError) process.exit(70);
+    if (this.#errorReporter.hadError) process.exit(65);
+    if (this.#errorReporter.hadRuntimeError) process.exit(70);
   }
 
   async runPrompt() {
@@ -42,28 +42,28 @@ class Lox {
       const line = await rl.question("> ");
       if (!line) break;
       this.run(line);
-      this.errorReporter.hadError = false;
+      this.#errorReporter.hadError = false;
     }
     rl.close();
   }
 
   run(source: string) {
-    const scanner = new Scanner(source, this.errorReporter);
+    const scanner = new Scanner(source, this.#errorReporter);
     const tokens = scanner.scanTokens();
 
-    const parser = new Parser(tokens, this.errorReporter);
+    const parser = new Parser(tokens, this.#errorReporter);
     const statements = parser.parse();
 
     // Stop if there was a syntax error.
-    if (this.errorReporter.hadError) return;
+    if (this.#errorReporter.hadError) return;
 
-    const resolver = new Resolver(this.interpreter, this.errorReporter);
+    const resolver = new Resolver(this.#interpreter, this.#errorReporter);
     resolver.resolve(statements);
 
-    if (this.errorReporter.hadError) return;
+    if (this.#errorReporter.hadError) return;
 
     // console.log(new AstPrinter().print(statements));
-    this.interpreter.interpret(statements);
+    this.#interpreter.interpret(statements);
   }
 }
 

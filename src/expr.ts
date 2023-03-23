@@ -4,9 +4,12 @@ export interface Visitor<R> {
   visitAssignExpr(expr: Assign): R;
   visitBinaryExpr(expr: Binary): R;
   visitCallExpr(expr: Call): R;
+  visitGetExpr(expr: Get): R;
   visitGroupingExpr(expr: Grouping): R;
   visitLiteralExpr(expr: Literal): R;
   visitLogicalExpr(expr: Logical): R;
+  visitSetExpr(expr: Set): R;
+  visitThisExpr(expr: This): R;
   visitUnaryExpr(expr: Unary): R;
   visitVariableExpr(expr: Variable): R;
 }
@@ -16,8 +19,8 @@ export abstract class Expr {
 }
 
 export class Assign extends Expr {
-  name: Token;
-  value: Expr;
+  name;
+  value;
 
   constructor(name: Token, value: Expr) {
     super();
@@ -31,9 +34,9 @@ export class Assign extends Expr {
 }
 
 export class Binary extends Expr {
-  left: Expr;
-  operator: Token;
-  right: Expr;
+  left;
+  operator;
+  right;
 
   constructor(left: Expr, operator: Token, right: Expr) {
     super();
@@ -48,9 +51,9 @@ export class Binary extends Expr {
 }
 
 export class Call extends Expr {
-  callee: Expr;
-  paren: Token;
-  args: Expr[];
+  callee;
+  paren;
+  args;
 
   constructor(callee: Expr, paren: Token, args: Expr[]) {
     super();
@@ -64,8 +67,23 @@ export class Call extends Expr {
   }
 }
 
+export class Get extends Expr {
+  object;
+  name;
+
+  constructor(object: Expr, name: Token) {
+    super();
+    this.object = object;
+    this.name = name;
+  }
+
+  override accept<R>(visitor: Visitor<R>): R {
+    return visitor.visitGetExpr(this);
+  }
+}
+
 export class Grouping extends Expr {
-  expression: Expr;
+  expression;
 
   constructor(expression: Expr) {
     super();
@@ -78,7 +96,7 @@ export class Grouping extends Expr {
 }
 
 export class Literal extends Expr {
-  value: Obj;
+  value;
 
   constructor(value: Obj) {
     super();
@@ -91,9 +109,9 @@ export class Literal extends Expr {
 }
 
 export class Logical extends Expr {
-  left: Expr;
-  operator: Token;
-  right: Expr;
+  left;
+  operator;
+  right;
 
   constructor(left: Expr, operator: Token, right: Expr) {
     super();
@@ -107,9 +125,39 @@ export class Logical extends Expr {
   }
 }
 
+export class Set extends Expr {
+  object;
+  name;
+  value;
+
+  constructor(object: Expr, name: Token, value: Expr) {
+    super();
+    this.object = object;
+    this.name = name;
+    this.value = value;
+  }
+
+  override accept<R>(visitor: Visitor<R>): R {
+    return visitor.visitSetExpr(this);
+  }
+}
+
+export class This extends Expr {
+  keyword;
+
+  constructor(keyword: Token) {
+    super();
+    this.keyword = keyword;
+  }
+
+  override accept<R>(visitor: Visitor<R>): R {
+    return visitor.visitThisExpr(this);
+  }
+}
+
 export class Unary extends Expr {
-  operator: Token;
-  right: Expr;
+  operator;
+  right;
 
   constructor(operator: Token, right: Expr) {
     super();
@@ -123,7 +171,7 @@ export class Unary extends Expr {
 }
 
 export class Variable extends Expr {
-  name: Token;
+  name;
 
   constructor(name: Token) {
     super();

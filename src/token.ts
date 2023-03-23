@@ -1,13 +1,22 @@
 import { LoxCallable } from "./lox-callable.js";
+import { LoxClass } from "./lox-class.js";
+import { LoxInstance } from "./lox-instance.js";
 import { TokenType } from "./token-type.js";
 
-export type Obj = string | number | boolean | LoxCallable | null;
+export type Obj =
+  | string
+  | number
+  | boolean
+  | LoxCallable
+  | LoxClass
+  | LoxInstance
+  | null;
 
 export class Token {
-  type: TokenType;
-  lexeme: string;
-  literal: Obj;
-  line: number;
+  type;
+  lexeme;
+  literal;
+  line;
 
   constructor(type: TokenType, lexeme: string, literal: Obj, line: number) {
     this.type = type;
@@ -17,6 +26,6 @@ export class Token {
   }
 
   display() {
-    return this.type + " " + this.lexeme + " " + this.literal;
+    return `${this.type} ${this.lexeme} ${this.literal}`;
   }
 }

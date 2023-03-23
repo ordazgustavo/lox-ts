@@ -2,11 +2,11 @@ import { RuntimeError } from "./runtime-error.js";
 import { Obj, Token } from "./token.js";
 
 export class Environment {
-  enclosing: Environment | null;
+  enclosing;
   private values = new Map<string, Obj>();
 
   constructor(enclosing?: Environment) {
-    this.enclosing = enclosing ?? null;
+    this.enclosing = enclosing;
   }
 
   get(name: Token): Obj {
@@ -14,7 +14,7 @@ export class Environment {
       return this.values.get(name.lexeme)!;
     }
 
-    if (this.enclosing !== null) return this.enclosing.get(name);
+    if (this.enclosing !== undefined) return this.enclosing.get(name);
 
     throw new RuntimeError(name, "Undefined variable '" + name.lexeme + "'.");
   }
@@ -37,10 +37,10 @@ export class Environment {
     this.values.set(name, value);
   }
 
-  ancestor(distance: number): Environment | null {
-    let environment: Environment | null = this;
+  ancestor(distance: number): Environment | undefined {
+    let environment: Environment | undefined = this;
     for (let i = 0; i < distance; i++) {
-      environment = environment?.enclosing ?? null;
+      environment = environment?.enclosing;
     }
 
     return environment;

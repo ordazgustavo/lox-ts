@@ -3,6 +3,7 @@ import { Token } from "./token.js";
 
 export interface Visitor<R> {
   visitBlockStmt(stmt: Block): R;
+  visitClassStmt(stmt: Class): R;
   visitExpressionStmt(stmt: Expression): R;
   visitFunStmt(stmt: Fun): R;
   visitIfStmt(stmt: If): R;
@@ -17,7 +18,7 @@ export abstract class Stmt {
 }
 
 export class Block extends Stmt {
-  statements: Stmt[];
+  statements;
 
   constructor(statements: Stmt[]) {
     super();
@@ -29,8 +30,23 @@ export class Block extends Stmt {
   }
 }
 
+export class Class extends Stmt {
+  name;
+  methods;
+
+  constructor(name: Token, methods: Fun[]) {
+    super();
+    this.name = name;
+    this.methods = methods;
+  }
+
+  override accept<R>(visitor: Visitor<R>): R {
+    return visitor.visitClassStmt(this);
+  }
+}
+
 export class Expression extends Stmt {
-  expression: Expr;
+  expression;
 
   constructor(expression: Expr) {
     super();
@@ -43,9 +59,9 @@ export class Expression extends Stmt {
 }
 
 export class Fun extends Stmt {
-  name: Token;
-  params: Token[];
-  body: Stmt[];
+  name;
+  params;
+  body;
 
   constructor(name: Token, params: Token[], body: Stmt[]) {
     super();
@@ -60,9 +76,9 @@ export class Fun extends Stmt {
 }
 
 export class If extends Stmt {
-  condition: Expr;
-  thenBranch: Stmt;
-  elseBranch: Stmt | null;
+  condition;
+  thenBranch;
+  elseBranch;
 
   constructor(condition: Expr, thenBranch: Stmt, elseBranch: Stmt | null) {
     super();
@@ -77,7 +93,7 @@ export class If extends Stmt {
 }
 
 export class Print extends Stmt {
-  expression: Expr;
+  expression;
 
   constructor(expression: Expr) {
     super();
@@ -90,8 +106,8 @@ export class Print extends Stmt {
 }
 
 export class Return extends Stmt {
-  keyword: Token;
-  value: Expr | null;
+  keyword;
+  value;
 
   constructor(keyword: Token, value: Expr | null) {
     super();
@@ -105,8 +121,8 @@ export class Return extends Stmt {
 }
 
 export class Var extends Stmt {
-  name: Token;
-  initializer: Expr | null;
+  name;
+  initializer;
 
   constructor(name: Token, initializer: Expr | null) {
     super();
@@ -120,8 +136,8 @@ export class Var extends Stmt {
 }
 
 export class While extends Stmt {
-  condition: Expr;
-  body: Stmt;
+  condition;
+  body;
 
   constructor(condition: Expr, body: Stmt) {
     super();

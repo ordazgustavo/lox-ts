@@ -7,9 +7,12 @@ defineAst(
     "Assign   : name: Token, value: Expr",
     "Binary   : left: Expr, operator: Token, right: Expr",
     "Call     : callee: Expr, paren: Token, args: Expr[]",
+    "Get      : object:  Expr, name: Token",
     "Grouping : expression: Expr",
     "Literal  : value: Obj",
     "Logical  : left: Expr, operator: Token, right: Expr",
+    "Set      : object:  Expr, name:  Token, value: Expr",
+    "This     : keyword: Token",
     "Unary    : operator: Token, right: Expr",
     "Variable : name: Token",
   ],
@@ -20,6 +23,7 @@ defineAst(
   "Stmt",
   [
     "Block      : statements: Stmt[]",
+    "Class      : name: Token, methods: Fun[]",
     "Expression : expression: Expr",
     "Fun        : name: Token, params: Token[], body: Stmt[]",
     "If         : condition: Expr, thenBranch: Stmt, elseBranch: Stmt | null",
@@ -52,10 +56,7 @@ function defineAst(
   defineVisitor(source, baseName, types);
   source.ref += "\n";
 
-  source.ref += `export abstract class ${baseName}  {
-abstract accept<R>(_visitor: Visitor<R>): R;
-}`;
-  source.ref += "\n\n";
+  source.ref += `export abstract class ${baseName} { abstract accept<R>(_visitor: Visitor<R>): R; }\n\n`;
 
   for (const type of types) {
     const [className, fields] = type.split(" : ");
@@ -77,15 +78,7 @@ function defineVisitor(source: Ref<string>, baseName: string, types: string[]) {
 
   for (const type of types) {
     const typeName = type.split(" : ")[0]!.trim();
-    source.ref +=
-      "visit" +
-      typeName +
-      baseName +
-      "(" +
-      baseName.toLowerCase() +
-      ": " +
-      typeName +
-      "): R;\n";
+    source.ref += `visit${typeName}${baseName}(${baseName.toLowerCase()}: ${typeName}): R\n`;
   }
 
   source.ref += "}\n";
@@ -102,7 +95,7 @@ function defineType(
   const fields = fieldList.split(", ");
   // Fields.
   for (const field of fields) {
-    source.ref += `${field}\n`;
+    source.ref += `${field.split(":")[0]}\n`;
   }
   source.ref += "\n";
 
@@ -115,10 +108,7 @@ function defineType(
     const name = field.split(": ")[0];
     source.ref += `this.${name} = ${name};\n`;
   }
-  source.ref += "}\n";
-  source.ref += "\n";
-  source.ref += `override accept<R>(visitor: Visitor<R>): R {
-return visitor.visit${className}${baseName}(this);}`;
-
+  source.ref += "}\n\n";
+  source.ref += `override accept<R>(visitor: Visitor<R>): R {return visitor.visit${className}${baseName}(this);}\n`;
   source.ref += "}\n";
 }

@@ -7,19 +7,27 @@ import { Token } from "./token.js";
 enum FunctionType {
   NONE,
   FUNCTION,
+  INITIALIZER,
+  METHOD,
+}
+
+enum ClassType {
+  NONE,
+  CLASS,
 }
 
 export class Resolver implements Expr.Visitor<void>, Stmt.Visitor<void> {
-  private interpreter: Interpreter;
+  #interpreter;
 
-  private scopes: Map<string, boolean>[] = [];
-  private currentFunction = FunctionType.NONE;
+  #scopes: Map<string, boolean>[] = [];
+  #currentFunction = FunctionType.NONE;
+  #currentClass = ClassType.NONE;
 
-  private errorReporter: ErrorReporter;
+  #errorReporter: ErrorReporter;
 
   constructor(interpreter: Interpreter, errorReporter: ErrorReporter) {
-    this.interpreter = interpreter;
-    this.errorReporter = errorReporter;
+    this.#interpreter = interpreter;
+    this.#errorReporter = errorReporter;
   }
 
   resolve(statements: Stmt.Stmt[]) {
@@ -33,34 +41,34 @@ export class Resolver implements Expr.Visitor<void>, Stmt.Visitor<void> {
   }
 
   resolveFun(fun: Stmt.Fun, type: FunctionType) {
-    let enclosingFunction = this.currentFunction;
-    this.currentFunction = type;
+    let enclosingFunction = this.#currentFunction;
+    this.#currentFunction = type;
 
-    this.beginScope();
+    this.#beginScope();
     for (const param of fun.params) {
-      this.declare(param);
-      this.define(param);
+      this.#declare(param);
+      this.#define(param);
     }
     this.resolve(fun.body);
-    this.endScope();
+    this.#endScope();
 
-    this.currentFunction = enclosingFunction;
+    this.#currentFunction = enclosingFunction;
   }
 
-  private beginScope() {
-    this.scopes.push(new Map());
+  #beginScope() {
+    this.#scopes.push(new Map());
   }
 
-  private endScope() {
-    this.scopes.pop();
+  #endScope() {
+    this.#scopes.pop();
   }
 
-  private declare(name: Token) {
-    if (!this.scopes.length) return;
+  #declare(name: Token) {
+    if (!this.#scopes.length) return;
 
-    const scope = this.scopes.at(-1);
+    const scope = this.#scopes.at(-1);
     if (scope?.has(name.lexeme)) {
-      this.errorReporter.resolverError(
+      this.#errorReporter.resolverError(
         name,
         "Already a variable with this name in this scope."
       );
@@ -68,24 +76,46 @@ export class Resolver implements Expr.Visitor<void>, Stmt.Visitor<void> {
     scope?.set(name.lexeme, false);
   }
 
-  private define(name: Token) {
-    if (!this.scopes.length) return;
-    this.scopes.at(-1)?.set(name.lexeme, true);
+  #define(name: Token) {
+    if (!this.#scopes.length) return;
+    this.#scopes.at(-1)?.set(name.lexeme, true);
   }
 
-  private resolveLocal(expr: Expr.Expr, name: Token) {
-    for (let i = this.scopes.length - 1; i >= 0; i--) {
-      if (this.scopes[i]!.has(name.lexeme)) {
-        this.interpreter.resolve(expr, this.scopes.length - 1 - i);
+  #resolveLocal(expr: Expr.Expr, name: Token) {
+    for (let i = this.#scopes.length - 1; i >= 0; i--) {
+      if (this.#scopes[i]!.has(name.lexeme)) {
+        this.#interpreter.resolve(expr, this.#scopes.length - 1 - i);
         return;
       }
     }
   }
 
   visitBlockStmt(stmt: Stmt.Block) {
-    this.beginScope();
+    this.#beginScope();
     this.resolve(stmt.statements);
-    this.endScope();
+    this.#endScope();
+  }
+
+  visitClassStmt(stmt: Stmt.Class) {
+    const enclosingClass = this.#currentClass;
+    this.#currentClass = ClassType.CLASS;
+
+    this.#declare(stmt.name);
+    this.#define(stmt.name);
+
+    this.#beginScope();
+    this.#scopes.at(-1)?.set("this", true);
+
+    for (const method of stmt.methods) {
+      let declaration = FunctionType.METHOD;
+      if (method.name.lexeme === "init") {
+        declaration = FunctionType.INITIALIZER;
+      }
+      this.resolveFun(method, declaration);
+    }
+
+    this.#endScope();
+    this.#currentClass = enclosingClass;
   }
 
   visitExpressionStmt(stmt: Stmt.Expression) {
@@ -93,8 +123,8 @@ export class Resolver implements Expr.Visitor<void>, Stmt.Visitor<void> {
   }
 
   visitFunStmt(stmt: Stmt.Fun) {
-    this.declare(stmt.name);
-    this.define(stmt.name);
+    this.#declare(stmt.name);
+    this.#define(stmt.name);
 
     this.resolveFun(stmt, FunctionType.FUNCTION);
   }
@@ -110,24 +140,30 @@ export class Resolver implements Expr.Visitor<void>, Stmt.Visitor<void> {
   }
 
   visitReturnStmt(stmt: Stmt.Return) {
-    if (this.currentFunction === FunctionType.NONE) {
-      this.errorReporter.resolverError(
+    if (this.#currentFunction === FunctionType.NONE) {
+      this.#errorReporter.resolverError(
         stmt.keyword,
         "Can't return from top-level code."
       );
     }
 
     if (stmt.value !== null) {
+      if (this.#currentFunction == FunctionType.INITIALIZER) {
+        this.#errorReporter.resolverError(
+          stmt.keyword,
+          "Can't return a value from an initializer."
+        );
+      }
       this.#resolve(stmt.value);
     }
   }
 
   visitVarStmt(stmt: Stmt.Var) {
-    this.declare(stmt.name);
+    this.#declare(stmt.name);
     if (stmt.initializer !== null) {
       this.#resolve(stmt.initializer);
     }
-    this.define(stmt.name);
+    this.#define(stmt.name);
   }
 
   visitWhileStmt(stmt: Stmt.While) {
@@ -137,7 +173,7 @@ export class Resolver implements Expr.Visitor<void>, Stmt.Visitor<void> {
 
   visitAssignExpr(expr: Expr.Assign) {
     this.#resolve(expr.value);
-    this.resolveLocal(expr, expr.name);
+    this.#resolveLocal(expr, expr.name);
   }
 
   visitBinaryExpr(expr: Expr.Binary) {
@@ -153,6 +189,10 @@ export class Resolver implements Expr.Visitor<void>, Stmt.Visitor<void> {
     }
   }
 
+  visitGetExpr(expr: Expr.Get) {
+    this.#resolve(expr.object);
+  }
+
   visitGroupingExpr(expr: Expr.Grouping) {
     this.#resolve(expr.expression);
   }
@@ -164,21 +204,38 @@ export class Resolver implements Expr.Visitor<void>, Stmt.Visitor<void> {
     this.#resolve(expr.right);
   }
 
+  visitSetExpr(expr: Expr.Set) {
+    this.#resolve(expr.value);
+    this.#resolve(expr.object);
+  }
+
+  visitThisExpr(expr: Expr.This) {
+    if (this.#currentClass === ClassType.NONE) {
+      this.#errorReporter.resolverError(
+        expr.keyword,
+        "Can't use 'this' outside of a class."
+      );
+      return;
+    }
+
+    this.#resolveLocal(expr, expr.keyword);
+  }
+
   visitUnaryExpr(expr: Expr.Unary) {
     this.#resolve(expr.right);
   }
 
   visitVariableExpr(expr: Expr.Variable) {
     if (
-      this.scopes.length &&
-      this.scopes.at(-1)?.get(expr.name.lexeme) === false
+      this.#scopes.length &&
+      this.#scopes.at(-1)?.get(expr.name.lexeme) === false
     ) {
-      this.errorReporter.resolverError(
+      this.#errorReporter.resolverError(
         expr.name,
         "Can't read local variable in its own initializer."
       );
     }
 
-    this.resolveLocal(expr, expr.name);
+    this.#resolveLocal(expr, expr.name);
   }
 }

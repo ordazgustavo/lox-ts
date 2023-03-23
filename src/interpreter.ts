@@ -9,16 +9,18 @@ import { LoxCallable } from "./lox-callable.js";
 import { Clock } from "./clock.js";
 import { LoxFun } from "./lox-fun.js";
 import { Return } from "./return.js";
+import { LoxClass } from "./lox-class.js";
+import { LoxInstance } from "./lox-instance.js";
 
 export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
-  private errorReporter: ErrorReporter;
+  #errorReporter: ErrorReporter;
 
   globals = new Environment();
-  private environment = this.globals;
-  private locals: WeakMap<Expr.Expr, number> = new WeakMap();
+  #environment = this.globals;
+  #locals: WeakMap<Expr.Expr, number> = new WeakMap();
 
   constructor(errorReporter: ErrorReporter) {
-    this.errorReporter = errorReporter;
+    this.#errorReporter = errorReporter;
 
     this.globals.define("clock", new Clock());
   }
@@ -26,69 +28,88 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
   interpret(statements: Stmt.Stmt[]) {
     try {
       for (const stmt of statements) {
-        this.execute(stmt);
+        this.#execute(stmt);
       }
     } catch (error) {
-      this.errorReporter.runtimeError(error as RuntimeError);
+      this.#errorReporter.runtimeError(error as RuntimeError);
     }
   }
 
-  private evaluate(expr: Expr.Expr): Obj {
+  #evaluate(expr: Expr.Expr): Obj {
     return expr.accept(this);
   }
 
-  private execute(stmt: Stmt.Stmt) {
+  #execute(stmt: Stmt.Stmt) {
     stmt.accept(this);
   }
 
   resolve(expr: Expr.Expr, depth: number) {
-    this.locals.set(expr, depth);
+    this.#locals.set(expr, depth);
   }
 
   executeBlock(statements: Stmt.Stmt[], environment: Environment) {
-    const previous = this.environment;
+    const previous = this.#environment;
     try {
-      this.environment = environment;
+      this.#environment = environment;
 
       for (const statement of statements) {
-        this.execute(statement);
+        this.#execute(statement);
       }
     } finally {
-      this.environment = previous;
+      this.#environment = previous;
     }
   }
 
-  public visitBlockStmt(stmt: Stmt.Block) {
-    this.executeBlock(stmt.statements, new Environment(this.environment));
+  visitBlockStmt(stmt: Stmt.Block) {
+    this.executeBlock(stmt.statements, new Environment(this.#environment));
+    return null;
+  }
+
+  visitClassStmt(stmt: Stmt.Class) {
+    this.#environment.define(stmt.name.lexeme, null);
+
+    const methods = new Map<string, LoxFun>();
+    for (const method of stmt.methods) {
+      const fun = new LoxFun(
+        method,
+        this.#environment,
+        method.name.lexeme === "init"
+      );
+      methods.set(method.name.lexeme, fun);
+    }
+
+    const klass = new LoxClass(stmt.name.lexeme, methods);
+
+    this.#environment.assign(stmt.name, klass);
     return null;
   }
 
   visitExpressionStmt(stmt: Stmt.Expression) {
-    this.evaluate(stmt.expression);
+    this.#evaluate(stmt.expression);
   }
 
-  public visitFunStmt(stmt: Stmt.Fun) {
-    const fun = new LoxFun(stmt, this.environment);
-    this.environment.define(stmt.name.lexeme, fun);
+  visitFunStmt(stmt: Stmt.Fun) {
+    const fun = new LoxFun(stmt, this.#environment, false);
+    this.#environment.define(stmt.name.lexeme, fun);
     return null;
   }
 
-  public visitIfStmt(stmt: Stmt.If) {
-    if (this.isTruthy(this.evaluate(stmt.condition))) {
-      this.execute(stmt.thenBranch);
+  visitIfStmt(stmt: Stmt.If) {
+    if (this.#isTruthy(this.#evaluate(stmt.condition))) {
+      this.#execute(stmt.thenBranch);
     } else if (stmt.elseBranch !== null) {
-      this.execute(stmt.elseBranch);
+      this.#execute(stmt.elseBranch);
     }
   }
 
   visitPrintStmt(stmt: Stmt.Print) {
-    const value = this.evaluate(stmt.expression);
-    console.log(this.stringify(value));
+    const value = this.#evaluate(stmt.expression);
+    console.log(this.#stringify(value));
   }
 
   visitReturnStmt(stmt: Stmt.Return) {
     let value = null;
-    if (stmt.value !== null) value = this.evaluate(stmt.value);
+    if (stmt.value !== null) value = this.#evaluate(stmt.value);
 
     throw new Return(value);
   }
@@ -96,22 +117,22 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
   visitVarStmt(stmt: Stmt.Var) {
     let value = null;
     if (stmt.initializer != null) {
-      value = this.evaluate(stmt.initializer);
+      value = this.#evaluate(stmt.initializer);
     }
 
-    this.environment.define(stmt.name.lexeme, value);
+    this.#environment.define(stmt.name.lexeme, value);
   }
   visitWhileStmt(stmt: Stmt.While) {
-    while (this.isTruthy(this.evaluate(stmt.condition))) {
-      this.execute(stmt.body);
+    while (this.#isTruthy(this.#evaluate(stmt.condition))) {
+      this.#execute(stmt.body);
     }
   }
 
   visitAssignExpr(expr: Expr.Assign): Obj {
-    const value = this.evaluate(expr.value);
-    const distance = this.locals.get(expr);
+    const value = this.#evaluate(expr.value);
+    const distance = this.#locals.get(expr);
     if (distance !== undefined) {
-      this.environment.assignAt(distance, expr.name, value);
+      this.#environment.assignAt(distance, expr.name, value);
     } else {
       this.globals.assign(expr.name, value);
     }
@@ -119,28 +140,28 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
   }
 
   visitBinaryExpr(expr: Expr.Binary): Obj {
-    const left = this.evaluate(expr.left);
-    const right = this.evaluate(expr.right);
+    const left = this.#evaluate(expr.left);
+    const right = this.#evaluate(expr.right);
 
     switch (expr.operator.type) {
       case TokenType.BANG_EQUAL:
-        return !this.isEqual(left, right);
+        return !this.#isEqual(left, right);
       case TokenType.EQUAL_EQUAL:
-        return this.isEqual(left, right);
+        return this.#isEqual(left, right);
       case TokenType.GREATER:
-        this.checkNumberOperands(expr.operator, left, right);
+        this.#checkNumberOperands(expr.operator, left, right);
         return Number(left) > Number(right);
       case TokenType.GREATER_EQUAL:
-        this.checkNumberOperands(expr.operator, left, right);
+        this.#checkNumberOperands(expr.operator, left, right);
         return Number(left) >= Number(right);
       case TokenType.LESS:
-        this.checkNumberOperands(expr.operator, left, right);
+        this.#checkNumberOperands(expr.operator, left, right);
         return Number(left) < Number(right);
       case TokenType.LESS_EQUAL:
-        this.checkNumberOperands(expr.operator, left, right);
+        this.#checkNumberOperands(expr.operator, left, right);
         return Number(left) <= Number(right);
       case TokenType.MINUS:
-        this.checkNumberOperands(expr.operator, left, right);
+        this.#checkNumberOperands(expr.operator, left, right);
         return Number(left) - Number(right);
       case TokenType.PLUS:
         if (typeof left === "number" && typeof right === "number") {
@@ -156,10 +177,10 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
           "Operands must be two numbers or two strings."
         );
       case TokenType.SLASH:
-        this.checkNumberOperands(expr.operator, left, right);
+        this.#checkNumberOperands(expr.operator, left, right);
         return Number(left) / Number(right);
       case TokenType.STAR:
-        this.checkNumberOperands(expr.operator, left, right);
+        this.#checkNumberOperands(expr.operator, left, right);
         return Number(left) * Number(right);
     }
 
@@ -167,11 +188,11 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
     return null;
   }
   visitCallExpr(expr: Expr.Call): Obj {
-    const callee = this.evaluate(expr.callee);
+    const callee = this.#evaluate(expr.callee);
 
     const args: Obj[] = [];
     for (const argument of expr.args) {
-      args.push(this.evaluate(argument));
+      args.push(this.#evaluate(argument));
     }
 
     if (!(callee instanceof LoxCallable)) {
@@ -190,20 +211,28 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
     }
     return fun.call(this, args);
   }
+  visitGetExpr(expr: Expr.Get): Obj {
+    const object = this.#evaluate(expr.object);
+    if (object instanceof LoxInstance) {
+      return object.get(expr.name);
+    }
+
+    throw new RuntimeError(expr.name, "Only instances have properties.");
+  }
   visitGroupingExpr(expr: Expr.Grouping): Obj {
-    return this.evaluate(expr.expression);
+    return this.#evaluate(expr.expression);
   }
   visitLiteralExpr(expr: Expr.Literal): Obj {
     return expr.value;
   }
   visitUnaryExpr(expr: Expr.Unary): Obj {
-    const right = this.evaluate(expr.right);
+    const right = this.#evaluate(expr.right);
 
     switch (expr.operator.type) {
       case TokenType.BANG:
-        return !this.isTruthy(right);
+        return !this.#isTruthy(right);
       case TokenType.MINUS:
-        this.checkNumberOperand(expr.operator, right);
+        this.#checkNumberOperand(expr.operator, right);
         return -Number(right);
     }
 
@@ -211,52 +240,66 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
     return null;
   }
   visitLogicalExpr(expr: Expr.Logical): Obj {
-    const left = this.evaluate(expr.left);
+    const left = this.#evaluate(expr.left);
 
     if (expr.operator.type == TokenType.OR) {
-      if (this.isTruthy(left)) return left;
+      if (this.#isTruthy(left)) return left;
     } else {
-      if (!this.isTruthy(left)) return left;
+      if (!this.#isTruthy(left)) return left;
     }
 
-    return this.evaluate(expr.right);
+    return this.#evaluate(expr.right);
+  }
+  visitSetExpr(expr: Expr.Set): Obj {
+    const object = this.#evaluate(expr.object);
+
+    if (!(object instanceof LoxInstance)) {
+      throw new RuntimeError(expr.name, "Only instances have fields.");
+    }
+
+    const value = this.#evaluate(expr.value);
+    object.set(expr.name, value);
+    return value;
+  }
+  visitThisExpr(expr: Expr.This): Obj {
+    return this.#lookUpVariable(expr.keyword, expr);
   }
   visitVariableExpr(expr: Expr.Variable): Obj {
-    return this.lookUpVariable(expr.name, expr);
+    return this.#lookUpVariable(expr.name, expr);
   }
 
-  private lookUpVariable(name: Token, expr: Expr.Expr): Obj {
-    const distance = this.locals.get(expr);
+  #lookUpVariable(name: Token, expr: Expr.Expr): Obj {
+    const distance = this.#locals.get(expr);
     if (distance !== undefined) {
-      return this.environment.getAt(distance, name.lexeme);
+      return this.#environment.getAt(distance, name.lexeme);
     } else {
       return this.globals.get(name);
     }
   }
 
-  private checkNumberOperand(operator: Token, operand: Obj) {
+  #checkNumberOperand(operator: Token, operand: Obj) {
     if (typeof operand === "number") return;
     throw new RuntimeError(operator, "Operand must be a number.");
   }
 
-  private checkNumberOperands(operator: Token, left: Obj, right: Obj) {
+  #checkNumberOperands(operator: Token, left: Obj, right: Obj) {
     if (typeof left === "number" && typeof right === "number") return;
 
     throw new RuntimeError(operator, "Operands must be numbers.");
   }
 
-  private isTruthy(object: Obj): boolean {
+  #isTruthy(object: Obj): boolean {
     if (object === null) return false;
     if (typeof object === "boolean") return object;
     return true;
   }
 
-  private isEqual(a: Obj, b: Obj): boolean {
+  #isEqual(a: Obj, b: Obj): boolean {
     return a === b;
   }
 
-  private stringify(object: Obj): string {
-    if (object == null) return "nil";
+  #stringify(object: Obj): string {
+    if (object === null) return "nil";
 
     if (typeof object === "number") {
       let text = object.toString();
