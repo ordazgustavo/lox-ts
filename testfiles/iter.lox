@@ -1,18 +1,43 @@
 class Iter {
+  next() { }
+}
 
-  init() {
-    this.count = 0;
+class Node {
+  init(value, next) {
+    this.value = value;
+    this.child = next;
   }
 
-  next() {
-    this.count = this.count + 1;
-    return this.count;
+  iter() {
+    return NodeIter(this);
   }
 }
 
-var iter = Iter();
+class NodeIter < Iter {
+  init(list) {
+    this.current = list;
+  }
+
+  next() {
+    if (this.current == nil) return nil;
+
+    var value = this.current.value;
+    this.current = this.current.child;
+
+    return value;
+  }
+}
+
+var start = clock();
+var list = Node("H", Node("e", Node("l", Node("l", Node("o", nil)))));
+var iter = list.iter();
+
 print iter.next();
 print iter.next();
 print iter.next();
 print iter.next();
-print iter.count;
+print iter.next();
+print iter.next();
+var end = clock();
+
+print end - start;

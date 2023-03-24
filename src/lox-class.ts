@@ -6,11 +6,17 @@ import { Obj } from "./token.js";
 
 export class LoxClass extends LoxCallable {
   name;
+  superclass;
   #methods;
 
-  constructor(name: string, methods: Map<string, LoxFun>) {
+  constructor(
+    name: string,
+    superclass: LoxClass | null,
+    methods: Map<string, LoxFun>
+  ) {
     super();
     this.name = name;
+    this.superclass = superclass;
     this.#methods = methods;
   }
 
@@ -18,6 +24,11 @@ export class LoxClass extends LoxCallable {
     if (this.#methods.has(name)) {
       return this.#methods.get(name);
     }
+
+    if (this.superclass !== null) {
+      return this.superclass.findMethod(name);
+    }
+
     return;
   }
 

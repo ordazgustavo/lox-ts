@@ -62,11 +62,26 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
 
   visitBlockStmt(stmt: Stmt.Block) {
     this.executeBlock(stmt.statements, new Environment(this.#environment));
-    return null;
   }
 
   visitClassStmt(stmt: Stmt.Class) {
+    let superclass: Obj | null = null;
+    if (stmt.superclass !== null) {
+      superclass = this.#evaluate(stmt.superclass);
+      if (!(superclass instanceof LoxClass)) {
+        throw new RuntimeError(
+          stmt.superclass.name,
+          "Superclass must be a class."
+        );
+      }
+    }
+
     this.#environment.define(stmt.name.lexeme, null);
+
+    if (stmt.superclass !== null) {
+      this.#environment = new Environment(this.#environment);
+      this.#environment.define("super", superclass);
+    }
 
     const methods = new Map<string, LoxFun>();
     for (const method of stmt.methods) {
@@ -78,10 +93,13 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
       methods.set(method.name.lexeme, fun);
     }
 
-    const klass = new LoxClass(stmt.name.lexeme, methods);
+    const klass = new LoxClass(stmt.name.lexeme, superclass, methods);
+
+    if (superclass !== null) {
+      this.#environment = this.#environment.enclosing!;
+    }
 
     this.#environment.assign(stmt.name, klass);
-    return null;
   }
 
   visitExpressionStmt(stmt: Stmt.Expression) {
@@ -91,7 +109,6 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
   visitFunStmt(stmt: Stmt.Fun) {
     const fun = new LoxFun(stmt, this.#environment, false);
     this.#environment.define(stmt.name.lexeme, fun);
-    return null;
   }
 
   visitIfStmt(stmt: Stmt.If) {
@@ -116,12 +133,13 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
 
   visitVarStmt(stmt: Stmt.Var) {
     let value = null;
-    if (stmt.initializer != null) {
+    if (stmt.initializer !== null) {
       value = this.#evaluate(stmt.initializer);
     }
 
     this.#environment.define(stmt.name.lexeme, value);
   }
+
   visitWhileStmt(stmt: Stmt.While) {
     while (this.#isTruthy(this.#evaluate(stmt.condition))) {
       this.#execute(stmt.body);
@@ -187,6 +205,7 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
     // Unreachable.
     return null;
   }
+
   visitCallExpr(expr: Expr.Call): Obj {
     const callee = this.#evaluate(expr.callee);
 
@@ -211,6 +230,7 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
     }
     return fun.call(this, args);
   }
+
   visitGetExpr(expr: Expr.Get): Obj {
     const object = this.#evaluate(expr.object);
     if (object instanceof LoxInstance) {
@@ -219,12 +239,15 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
 
     throw new RuntimeError(expr.name, "Only instances have properties.");
   }
+
   visitGroupingExpr(expr: Expr.Grouping): Obj {
     return this.#evaluate(expr.expression);
   }
+
   visitLiteralExpr(expr: Expr.Literal): Obj {
     return expr.value;
   }
+
   visitUnaryExpr(expr: Expr.Unary): Obj {
     const right = this.#evaluate(expr.right);
 
@@ -232,13 +255,13 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
       case TokenType.BANG:
         return !this.#isTruthy(right);
       case TokenType.MINUS:
-        this.#checkNumberOperand(expr.operator, right);
-        return -Number(right);
+        if (this.#checkNumberOperand(expr.operator, right)) return -right;
     }
 
     // Unreachable.
     return null;
   }
+
   visitLogicalExpr(expr: Expr.Logical): Obj {
     const left = this.#evaluate(expr.left);
 
@@ -250,6 +273,7 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
 
     return this.#evaluate(expr.right);
   }
+
   visitSetExpr(expr: Expr.Set): Obj {
     const object = this.#evaluate(expr.object);
 
@@ -261,9 +285,25 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
     object.set(expr.name, value);
     return value;
   }
+
+  visitSuperExpr(expr: Expr.Super): Obj {
+    const distance = this.#locals.get(expr)!;
+    const superclass = this.#environment.getAt(distance, "super") as LoxClass;
+    const object = this.#environment.getAt(distance - 1, "this") as LoxInstance;
+    const method = superclass.findMethod(expr.method.lexeme);
+    if (!method) {
+      throw new RuntimeError(
+        expr.method,
+        `Undefined property '${expr.method.lexeme}'.`
+      );
+    }
+    return method.bind(object);
+  }
+
   visitThisExpr(expr: Expr.This): Obj {
     return this.#lookUpVariable(expr.keyword, expr);
   }
+
   visitVariableExpr(expr: Expr.Variable): Obj {
     return this.#lookUpVariable(expr.name, expr);
   }
@@ -277,8 +317,8 @@ export class Interpreter implements Expr.Visitor<Obj>, Stmt.Visitor<void> {
     }
   }
 
-  #checkNumberOperand(operator: Token, operand: Obj) {
-    if (typeof operand === "number") return;
+  #checkNumberOperand(operator: Token, operand: Obj): operand is number {
+    if (typeof operand === "number") return true;
     throw new RuntimeError(operator, "Operand must be a number.");
   }
 

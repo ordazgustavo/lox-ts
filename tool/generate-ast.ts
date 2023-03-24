@@ -12,6 +12,7 @@ defineAst(
     "Literal  : value: Obj",
     "Logical  : left: Expr, operator: Token, right: Expr",
     "Set      : object:  Expr, name:  Token, value: Expr",
+    "Super    : keyword:  Token, method: Token",
     "This     : keyword: Token",
     "Unary    : operator: Token, right: Expr",
     "Variable : name: Token",
@@ -23,7 +24,7 @@ defineAst(
   "Stmt",
   [
     "Block      : statements: Stmt[]",
-    "Class      : name: Token, methods: Fun[]",
+    "Class      : name: Token, superclass: Variable | null, methods: Fun[]",
     "Expression : expression: Expr",
     "Fun        : name: Token, params: Token[], body: Stmt[]",
     "If         : condition: Expr, thenBranch: Stmt, elseBranch: Stmt | null",
@@ -33,7 +34,7 @@ defineAst(
     "While      : condition: Expr, body: Stmt",
   ],
   [
-    [["Expr"], "expr"],
+    [["Expr", "Variable"], "expr"],
     [["Token"], "token"],
   ]
 );

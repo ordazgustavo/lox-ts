@@ -1,4 +1,4 @@
-import { Expr } from "./expr.js";
+import { Expr, Variable } from "./expr.js";
 import { Token } from "./token.js";
 
 export interface Visitor<R> {
@@ -32,11 +32,13 @@ export class Block extends Stmt {
 
 export class Class extends Stmt {
   name;
+  superclass;
   methods;
 
-  constructor(name: Token, methods: Fun[]) {
+  constructor(name: Token, superclass: Variable | null, methods: Fun[]) {
     super();
     this.name = name;
+    this.superclass = superclass;
     this.methods = methods;
   }
 
